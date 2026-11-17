@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Messenger - Voice & Video Call</title>
+  <title>Messenger - Live Voice & Video Call</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
     body { background: #0f172a; color: #f8fafc; display: flex; flex-direction: column; align-items: center; padding: 20px; min-height: 100vh; }
@@ -17,7 +17,7 @@
     .videos { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; width: 100%; max-width: 900px; margin-bottom: 16px; }
     .video-box { background: #1e293b; border-radius: 12px; overflow: hidden; position: relative; aspect-ratio: 16/9; border: 1px solid #334155; }
     video { width: 100%; height: 100%; object-fit: cover; background: #000; }
-    .label { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.65); padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; }
+    .label { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; }
 
     .controls, .room-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
     button { padding: 10px 16px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; background: #3b82f6; color: white; transition: 0.2s; }
@@ -27,21 +27,40 @@
     button.google:hover { background: #e2e8f0; }
     button.danger { background: #ef4444; }
     button.danger:hover { background: #dc2626; }
+    button.success { background: #10b981; }
+    button.success:hover { background: #059669; }
     button.secondary { background: #334155; }
     button.secondary:hover { background: #475569; }
 
-    input { padding: 10px 12px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #38bdf8; font-family: monospace; font-size: 0.9rem; flex: 1; min-width: 220px; }
-    .status { font-size: 0.85rem; color: #94a3b8; margin-top: 10px; }
+    input { padding: 10px 12px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #38bdf8; font-family: monospace; font-size: 0.9rem; flex: 1; min-width: 200px; }
+    .status { font-size: 0.85rem; color: #38bdf8; margin-top: 10px; font-weight: 500; }
+
+    /* Online Users List & Incoming Call Banner */
+    .user-list { display: grid; gap: 8px; margin-top: 10px; }
+    .user-row { display: flex; align-items: center; justify-content: space-between; background: #0f172a; padding: 10px 14px; border-radius: 8px; border: 1px solid #334155; }
+    .incoming-banner { background: #065f46; border: 1px solid #10b981; padding: 14px; border-radius: 10px; display: none; justify-content: space-between; align-items: center; width: 100%; max-width: 900px; margin-bottom: 16px; }
   </style>
 </head>
 <body>
 
   <h1>Messenger Voice & Video Call</h1>
 
-  <!-- 1. Firebase Google Sign-In -->
+  <!-- Incoming Call Notification Banner -->
+  <div id="incomingBanner" class="incoming-banner">
+    <div>
+      <strong id="callerNameText">Incoming Call...</strong>
+      <div style="font-size: 0.85rem; color: #a7f3d0;" id="callTypeText">Video & Voice Call</div>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <button id="btnAcceptCall" class="success">Answer</button>
+      <button id="btnRejectCall" class="danger">Decline</button>
+    </div>
+  </div>
+
+  <!-- 1. Google Sign-In -->
   <div class="card auth-bar">
     <div id="loggedOutView" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-      <span style="color: #94a3b8; font-size: 0.9rem;">Sign in with Google to start or join a call</span>
+      <span style="color: #94a3b8; font-size: 0.9rem;">Sign in with Google to talk with other users</span>
       <button id="btnSignIn" class="google">Sign in with Google</button>
     </div>
 
@@ -55,7 +74,7 @@
     </div>
   </div>
 
-  <!-- 2. Video Feeds -->
+  <!-- 2. Video & Audio Feeds -->
   <div class="videos">
     <div class="video-box">
       <video id="localVideo" autoplay playsinline muted></video>
@@ -63,35 +82,36 @@
     </div>
     <div class="video-box">
       <video id="remoteVideo" autoplay playsinline></video>
-      <div class="label">Remote Peer</div>
+      <div class="label" id="remoteLabel">Remote Peer</div>
     </div>
   </div>
 
-  <!-- 3. Media & Call Room Controls -->
+  <!-- 3. In-Call Audio/Video Controls -->
   <div class="card">
-    <div class="controls" style="margin-bottom: 14px;">
-      <button id="btnVideoCall" disabled>1. Enable Video + Mic</button>
-      <button id="btnVoiceCall" disabled>1. Enable Mic Only</button>
+    <div class="controls">
       <button id="btnMute" class="secondary" disabled>Mute Mic</button>
       <button id="btnCam" class="secondary" disabled>Turn Off Cam</button>
       <button id="btnHangup" class="danger" disabled>Hang Up</button>
     </div>
-
-    <div class="room-controls">
-      <button id="btnCreateRoom" disabled>2. Create Call Room</button>
-      <input id="roomIdInput" type="text" placeholder="Enter Call Room ID to join..." />
-      <button id="btnCopyRoom" class="secondary" disabled>Copy ID</button>
-      <button id="btnJoinRoom" disabled>3. Join Call Room</button>
-    </div>
     <p class="status" id="statusText">Status: Waiting for Google Sign-In...</p>
   </div>
 
-  <!-- Firebase Modular SDK (v10) -->
+  <!-- 4. Online Users Directory (Click to Call) -->
+  <div class="card" id="directoryCard" style="display: none;">
+    <h3 style="font-size: 1rem; margin-bottom: 4px;">Online Users (Click to Talk)</h3>
+    <p style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 10px;">Open this page on a second device or browser signed into another Google account.</p>
+    <div id="onlineUsersList" class="user-list">
+      <div style="color: #64748b; font-size: 0.85rem;">Loading online users...</div>
+    </div>
+  </div>
+
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js";
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-    import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, addDoc, onSnapshot, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import {
+      getFirestore, collection, doc, setDoc, getDoc, updateDoc, addDoc,
+      onSnapshot, deleteDoc, getDocs, query, where, serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAXznQ-Nv4JlIuK0atn3N4qPCW8R8GpeOs",
@@ -104,246 +124,373 @@
     };
 
     const app = initializeApp(firebaseConfig);
-    const analytics = getAnalytics(app);
     const auth = getAuth(app);
     const db = getFirestore(app);
     const provider = new GoogleAuthProvider();
 
+    // STUN servers for NAT traversal
     const rtcConfig = {
       iceServers: [
-        { urls: ["stun:stun1.l.google.com:19302", "stun:stun2.l.google.com:19302"] }
-      ]
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:stun2.l.google.com:19302" },
+        { urls: "stun:stun3.l.google.com:19302" }
+      ],
+      iceCandidatePoolSize: 10
     };
 
     let pc = null;
     let localStream = null;
     let remoteStream = null;
     let currentRoomId = null;
+    let pendingCandidates = [];
     let isMuted = false;
     let isCamOff = false;
+    let incomingCallDoc = null;
+    let unsubCallListeners = [];
 
+    // DOM Elements
     const statusText = document.getElementById("statusText");
     const localVideo = document.getElementById("localVideo");
     const remoteVideo = document.getElementById("remoteVideo");
-    const roomIdInput = document.getElementById("roomIdInput");
-
     const btnSignIn = document.getElementById("btnSignIn");
     const btnSignOut = document.getElementById("btnSignOut");
-    const btnVideoCall = document.getElementById("btnVideoCall");
-    const btnVoiceCall = document.getElementById("btnVoiceCall");
     const btnMute = document.getElementById("btnMute");
     const btnCam = document.getElementById("btnCam");
     const btnHangup = document.getElementById("btnHangup");
-    const btnCreateRoom = document.getElementById("btnCreateRoom");
-    const btnCopyRoom = document.getElementById("btnCopyRoom");
-    const btnJoinRoom = document.getElementById("btnJoinRoom");
+    const incomingBanner = document.getElementById("incomingBanner");
 
-    // 1. Google Sign-In
+    // --- 1. Authentication & Online Presence ---
     btnSignIn.onclick = () => signInWithPopup(auth, provider).catch(err => alert(err.message));
-    btnSignOut.onclick = () => {
-      hangUp();
+    btnSignOut.onclick = async () => {
+      await hangUp();
+      if (auth.currentUser) {
+        await deleteDoc(doc(db, "users", auth.currentUser.uid)).catch(() => {});
+      }
       signOut(auth);
     };
 
-    onAuthStateChanged(auth, (user) => {
+    onAuthStateChanged(auth, async (user) => {
       if (user) {
         document.getElementById("loggedOutView").style.display = "none";
         document.getElementById("loggedInView").style.display = "flex";
+        document.getElementById("directoryCard").style.display = "block";
         document.getElementById("userName").textContent = user.displayName;
         document.getElementById("userEmail").textContent = user.email;
         document.getElementById("userPic").src = user.photoURL;
         document.getElementById("localLabel").textContent = `You (${user.displayName})`;
+        statusText.textContent = "Status: Online & ready to talk.";
 
-        btnVideoCall.disabled = false;
-        btnVoiceCall.disabled = false;
-        statusText.textContent = "Status: Signed in. Enable camera/mic to start.";
+        // Register user as online in Firestore
+        await setDoc(doc(db, "users", user.uid), {
+          uid: user.uid,
+          name: user.displayName,
+          email: user.email,
+          photo: user.photoURL,
+          onlineAt: serverTimestamp()
+        });
+
+        listenForOnlineUsers(user.uid);
+        listenForIncomingCalls(user.uid);
       } else {
         document.getElementById("loggedOutView").style.display = "flex";
         document.getElementById("loggedInView").style.display = "none";
-        btnVideoCall.disabled = true;
-        btnVoiceCall.disabled = true;
+        document.getElementById("directoryCard").style.display = "none";
         statusText.textContent = "Status: Waiting for Google Sign-In...";
       }
     });
 
-    // 2. Start Local Media
-    async function startMedia(withVideo) {
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: withVideo });
-        remoteStream = new MediaStream();
+    // --- 2. Live Online Users List ---
+    function listenForOnlineUsers(myUid) {
+      onSnapshot(collection(db, "users"), (snapshot) => {
+        const list = document.getElementById("onlineUsersList");
+        list.innerHTML = "";
+        let count = 0;
 
-        localVideo.srcObject = localStream;
-        remoteVideo.srcObject = remoteStream;
+        snapshot.forEach((docSnap) => {
+          const u = docSnap.data();
+          if (u.uid === myUid) return;
+          count++;
 
-        btnVideoCall.disabled = true;
-        btnVoiceCall.disabled = true;
-        btnMute.disabled = false;
-        btnCam.disabled = !withVideo;
-        btnHangup.disabled = false;
-        btnCreateRoom.disabled = false;
-        btnJoinRoom.disabled = false;
-        statusText.textContent = "Status: Media ready. Create a Call Room or enter an ID to join.";
-      } catch (err) {
-        alert("Media access error: " + err.message);
+          const row = document.createElement("div");
+          row.className = "user-row";
+          row.innerHTML = `
+            <div style="display:flex; align-items:center; gap:10px;">
+              <img src="${u.photo || ''}" style="width:32px; height:32px; border-radius:50%;" />
+              <div>
+                <div style="font-weight:600; font-size:0.9rem;">${u.name}</div>
+                <div style="font-size:0.75rem; color:#94a3b8;">${u.email}</div>
+              </div>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="secondary" data-voice="${u.uid}">Voice Call</button>
+              <button data-video="${u.uid}">Video Call</button>
+            </div>
+          `;
+
+          row.querySelector(`[data-voice="${u.uid}"]`).onclick = () => startCall(u, false);
+          row.querySelector(`[data-video="${u.uid}"]`).onclick = () => startCall(u, true);
+          list.appendChild(row);
+        });
+
+        if (count === 0) {
+          list.innerHTML = `<div style="color:#64748b; font-size:0.85rem;">No other users online right now. Open this app in another browser/device with a second Google account to test!</div>`;
+        }
+      });
+    }
+
+    // --- 3. Initialize Local Audio/Video & PeerConnection ---
+    async function initMediaAndPeer(withVideo) {
+      localStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: withVideo
+      });
+
+      remoteStream = new MediaStream();
+      localVideo.srcObject = localStream;
+      remoteVideo.srcObject = remoteStream;
+
+      pc = new RTCPeerConnection(rtcConfig);
+      pendingCandidates = [];
+
+      localStream.getTracks().forEach((track) => {
+        pc.addTrack(track, localStream);
+      });
+
+      pc.ontrack = (event) => {
+        event.streams[0].getTracks().forEach((track) => {
+          remoteStream.addTrack(track);
+        });
+        // Ensure browser plays remote audio & video immediately
+        remoteVideo.play().catch(() => {});
+      };
+
+      pc.onconnectionstatechange = () => {
+        if (!pc) return;
+        statusText.textContent = `Status: Connection ${pc.connectionState}`;
+        if (pc.connectionState === "connected") {
+          statusText.textContent = "Status: Connected — Live audio/video active!";
+        } else if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
+          hangUp();
+        }
+      };
+
+      btnMute.disabled = false;
+      btnCam.disabled = !withVideo;
+      btnHangup.disabled = false;
+    }
+
+    async function flushPendingCandidates() {
+      while (pendingCandidates.length > 0) {
+        const candidate = pendingCandidates.shift();
+        await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
       }
     }
 
-    btnVideoCall.onclick = () => startMedia(true);
-    btnVoiceCall.onclick = () => startMedia(false);
+    // --- 4. Outgoing Call (Caller) ---
+    async function startCall(targetUser, withVideo) {
+      try {
+        statusText.textContent = `Calling ${targetUser.name}...`;
+        document.getElementById("remoteLabel").textContent = targetUser.name;
+        await initMediaAndPeer(withVideo);
 
-    // 3. Create Room (Caller)
-    btnCreateRoom.onclick = async () => {
-      btnCreateRoom.disabled = true;
-      btnJoinRoom.disabled = true;
+        const roomRef = doc(collection(db, "calls"));
+        currentRoomId = roomRef.id;
 
-      pc = new RTCPeerConnection(rtcConfig);
-      registerPeerListeners();
+        const callerCandidatesCol = collection(roomRef, "callerCandidates");
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            addDoc(callerCandidatesCol, event.candidate.toJSON());
+          }
+        };
 
-      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
 
-      const roomRef = doc(collection(db, "calls"));
-      currentRoomId = roomRef.id;
-      roomIdInput.value = currentRoomId;
-      btnCopyRoom.disabled = false;
+        await setDoc(roomRef, {
+          callerUid: auth.currentUser.uid,
+          callerName: auth.currentUser.displayName,
+          calleeUid: targetUser.uid,
+          withVideo: withVideo,
+          status: "ringing",
+          offer: { type: offer.type, sdp: offer.sdp }
+        });
 
-      const callerCandidatesCollection = collection(roomRef, "callerCandidates");
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          addDoc(callerCandidatesCollection, event.candidate.toJSON());
-        }
-      };
-
-      const offerDescription = await pc.createOffer();
-      await pc.setLocalDescription(offerDescription);
-
-      await setDoc(roomRef, {
-        offer: { type: offerDescription.type, sdp: offerDescription.sdp },
-        createdBy: auth.currentUser.email
-      });
-
-      statusText.textContent = `Room created! Share this ID with your peer: ${currentRoomId}`;
-
-      onSnapshot(roomRef, (snapshot) => {
-        const data = snapshot.data();
-        if (!pc.currentRemoteDescription && data?.answer) {
-          const answerDescription = new RTCSessionDescription(data.answer);
-          pc.setRemoteDescription(answerDescription);
-          statusText.textContent = "Status: Connected!";
-        }
-      });
-
-      onSnapshot(collection(roomRef, "calleeCandidates"), (snapshot) => {
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === "added") {
-            pc.addIceCandidate(new RTCIceCandidate(change.doc.data()));
+        // Listen for answer or rejection
+        const unsubRoom = onSnapshot(roomRef, async (snap) => {
+          if (!snap.exists()) {
+            hangUp();
+            return;
+          }
+          const data = snap.data();
+          if (data.status === "rejected") {
+            alert(`${targetUser.name} declined the call.`);
+            hangUp();
+            return;
+          }
+          if (!pc.currentRemoteDescription && data.answer) {
+            await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+            await flushPendingCandidates();
+            statusText.textContent = `Talking with ${targetUser.name}...`;
           }
         });
-      });
-    };
 
-    btnCopyRoom.onclick = () => {
-      navigator.clipboard.writeText(roomIdInput.value);
-      btnCopyRoom.textContent = "Copied!";
-      setTimeout(() => (btnCopyRoom.textContent = "Copy ID"), 1500);
-    };
-
-    // 4. Join Room (Callee)
-    btnJoinRoom.onclick = async () => {
-      const roomId = roomIdInput.value.trim();
-      if (!roomId) return alert("Enter a Call Room ID first.");
-
-      const roomRef = doc(db, "calls", roomId);
-      const roomSnapshot = await getDoc(roomRef);
-      if (!roomSnapshot.exists()) return alert("Call Room not found!");
-
-      currentRoomId = roomId;
-      btnCreateRoom.disabled = true;
-      btnJoinRoom.disabled = true;
-
-      pc = new RTCPeerConnection(rtcConfig);
-      registerPeerListeners();
-
-      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-      const calleeCandidatesCollection = collection(roomRef, "calleeCandidates");
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          addDoc(calleeCandidatesCollection, event.candidate.toJSON());
-        }
-      };
-
-      const offer = roomSnapshot.data().offer;
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-
-      const answerDescription = await pc.createAnswer();
-      await pc.setLocalDescription(answerDescription);
-
-      await updateDoc(roomRef, {
-        answer: { type: answerDescription.type, sdp: answerDescription.sdp }
-      });
-
-      statusText.textContent = "Status: Connected!";
-
-      onSnapshot(collection(roomRef, "callerCandidates"), (snapshot) => {
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === "added") {
-            pc.addIceCandidate(new RTCIceCandidate(change.doc.data()));
-          }
+        // Listen for callee ICE candidates
+        const unsubCandidates = onSnapshot(collection(roomRef, "calleeCandidates"), (snap) => {
+          snap.docChanges().forEach(async (change) => {
+            if (change.type === "added") {
+              const cand = change.doc.data();
+              if (pc && pc.remoteDescription) {
+                await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+              } else {
+                pendingCandidates.push(cand);
+              }
+            }
+          });
         });
-      });
-    };
 
-    function registerPeerListeners() {
-      pc.ontrack = (event) => {
-        event.streams[0].getTracks().forEach(track => remoteStream.addTrack(track));
-      };
+        unsubCallListeners.push(unsubRoom, unsubCandidates);
+      } catch (err) {
+        alert("Could not start call: " + err.message);
+        hangUp();
+      }
     }
 
-    // 5. Controls & Hang Up
+    // --- 5. Incoming Call Listener & Answer (Callee) ---
+    function listenForIncomingCalls(myUid) {
+      const q = query(
+        collection(db, "calls"),
+        where("calleeUid", "==", myUid),
+        where("status", "==", "ringing")
+      );
+
+      onSnapshot(q, (snap) => {
+        if (snap.empty || currentRoomId) {
+          incomingBanner.style.display = "none";
+          incomingCallDoc = null;
+          return;
+        }
+        incomingCallDoc = snap.docs[0];
+        const data = incomingCallDoc.data();
+        document.getElementById("callerNameText").textContent = `${data.callerName} is calling you...`;
+        document.getElementById("callTypeText").textContent = data.withVideo ? "Video + Voice Call" : "Voice Only Call";
+        incomingBanner.style.display = "flex";
+      });
+    }
+
+    document.getElementById("btnRejectCall").onclick = async () => {
+      if (!incomingCallDoc) return;
+      await updateDoc(incomingCallDoc.ref, { status: "rejected" });
+      incomingBanner.style.display = "none";
+      incomingCallDoc = null;
+    };
+
+    document.getElementById("btnAcceptCall").onclick = async () => {
+      if (!incomingCallDoc) return;
+      const roomRef = incomingCallDoc.ref;
+      const callData = incomingCallDoc.data();
+      currentRoomId = roomRef.id;
+      incomingBanner.style.display = "none";
+
+      try {
+        document.getElementById("remoteLabel").textContent = callData.callerName;
+        await initMediaAndPeer(callData.withVideo);
+
+        const calleeCandidatesCol = collection(roomRef, "calleeCandidates");
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            addDoc(calleeCandidatesCol, event.candidate.toJSON());
+          }
+        };
+
+        await pc.setRemoteDescription(new RTCSessionDescription(callData.offer));
+        await flushPendingCandidates();
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        await updateDoc(roomRef, {
+          status: "connected",
+          answer: { type: answer.type, sdp: answer.sdp }
+        });
+
+        statusText.textContent = `Talking with ${callData.callerName}...`;
+
+        // Listen if caller hangs up
+        const unsubRoom = onSnapshot(roomRef, (snap) => {
+          if (!snap.exists()) hangUp();
+        });
+
+        // Listen for caller ICE candidates
+        const unsubCandidates = onSnapshot(collection(roomRef, "callerCandidates"), (snap) => {
+          snap.docChanges().forEach(async (change) => {
+            if (change.type === "added") {
+              const cand = change.doc.data();
+              if (pc && pc.remoteDescription) {
+                await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+              } else {
+                pendingCandidates.push(cand);
+              }
+            }
+          });
+        });
+
+        unsubCallListeners.push(unsubRoom, unsubCandidates);
+      } catch (err) {
+        alert("Failed to answer call: " + err.message);
+        hangUp();
+      }
+    };
+
+    // --- 6. Mute, Camera Toggle & Hang Up ---
     btnMute.onclick = () => {
       isMuted = !isMuted;
-      localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+      localStream.getAudioTracks().forEach((t) => (t.enabled = !isMuted));
       btnMute.textContent = isMuted ? "Unmute Mic" : "Mute Mic";
     };
 
     btnCam.onclick = () => {
       isCamOff = !isCamOff;
-      localStream.getVideoTracks().forEach(t => t.enabled = !isCamOff);
+      localStream.getVideoTracks().forEach((t) => (t.enabled = !isCamOff));
       btnCam.textContent = isCamOff ? "Turn On Cam" : "Turn Off Cam";
     };
 
     async function hangUp() {
+      unsubCallListeners.forEach((unsub) => unsub());
+      unsubCallListeners = [];
+
       if (pc) {
         pc.close();
         pc = null;
       }
       if (localStream) {
-        localStream.getTracks().forEach(t => t.stop());
+        localStream.getTracks().forEach((t) => t.stop());
         localStream = null;
       }
       localVideo.srcObject = null;
       remoteVideo.srcObject = null;
+      document.getElementById("remoteLabel").textContent = "Remote Peer";
 
       if (currentRoomId) {
         const roomRef = doc(db, "calls", currentRoomId);
-        const calleeDocs = await getDocs(collection(roomRef, "calleeCandidates"));
-        calleeDocs.forEach(d => deleteDoc(d.ref));
-        const callerDocs = await getDocs(collection(roomRef, "callerCandidates"));
-        callerDocs.forEach(d => deleteDoc(d.ref));
-        await deleteDoc(roomRef);
+        const c1 = await getDocs(collection(roomRef, "calleeCandidates")).catch(() => []);
+        c1.forEach((d) => deleteDoc(d.ref));
+        const c2 = await getDocs(collection(roomRef, "callerCandidates")).catch(() => []);
+        c2.forEach((d) => deleteDoc(d.ref));
+        await deleteDoc(roomRef).catch(() => {});
         currentRoomId = null;
       }
 
-      roomIdInput.value = "";
-      btnCopyRoom.disabled = true;
-      btnVideoCall.disabled = !auth.currentUser;
-      btnVoiceCall.disabled = !auth.currentUser;
       btnMute.disabled = true;
       btnCam.disabled = true;
       btnHangup.disabled = true;
-      btnCreateRoom.disabled = true;
-      btnJoinRoom.disabled = true;
-      statusText.textContent = "Status: Call ended.";
+      isMuted = false;
+      isCamOff = false;
+      btnMute.textContent = "Mute Mic";
+      btnCam.textContent = "Turn Off Cam";
+      if (auth.currentUser) {
+        statusText.textContent = "Status: Call ended. Ready to talk.";
+      }
     }
 
     btnHangup.onclick = hangUp;
