@@ -19,7 +19,7 @@
     video { width: 100%; height: 100%; object-fit: cover; background: #000; }
     .label { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; }
 
-    .controls, .room-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
     button { padding: 10px 16px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; background: #3b82f6; color: white; transition: 0.2s; }
     button:hover { background: #2563eb; }
     button:disabled { background: #475569; cursor: not-allowed; }
@@ -32,13 +32,29 @@
     button.secondary { background: #334155; }
     button.secondary:hover { background: #475569; }
 
-    input { padding: 10px 12px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #38bdf8; font-family: monospace; font-size: 0.9rem; flex: 1; min-width: 200px; }
     .status { font-size: 0.85rem; color: #38bdf8; margin-top: 10px; font-weight: 500; }
 
     /* Online Users List & Incoming Call Banner */
     .user-list { display: grid; gap: 8px; margin-top: 10px; }
     .user-row { display: flex; align-items: center; justify-content: space-between; background: #0f172a; padding: 10px 14px; border-radius: 8px; border: 1px solid #334155; }
-    .incoming-banner { background: #065f46; border: 1px solid #10b981; padding: 14px; border-radius: 10px; display: none; justify-content: space-between; align-items: center; width: 100%; max-width: 900px; margin-bottom: 16px; }
+    
+    @keyframes pulseRing {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
+      50% { box-shadow: 0 0 0 12px rgba(16, 185, 129, 0); }
+    }
+    .incoming-banner {
+      background: #065f46;
+      border: 1px solid #10b981;
+      padding: 16px;
+      border-radius: 12px;
+      display: none;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      max-width: 900px;
+      margin-bottom: 16px;
+      animation: pulseRing 1.5s infinite;
+    }
   </style>
 </head>
 <body>
@@ -48,10 +64,10 @@
   <!-- Incoming Call Notification Banner -->
   <div id="incomingBanner" class="incoming-banner">
     <div>
-      <strong id="callerNameText">Incoming Call...</strong>
+      <strong id="callerNameText" style="font-size: 1.05rem;">Incoming Call...</strong>
       <div style="font-size: 0.85rem; color: #a7f3d0;" id="callTypeText">Video & Voice Call</div>
     </div>
-    <div style="display: flex; gap: 8px;">
+    <div style="display: flex; gap: 10px;">
       <button id="btnAcceptCall" class="success">Answer</button>
       <button id="btnRejectCall" class="danger">Decline</button>
     </div>
@@ -92,14 +108,15 @@
       <button id="btnMute" class="secondary" disabled>Mute Mic</button>
       <button id="btnCam" class="secondary" disabled>Turn Off Cam</button>
       <button id="btnHangup" class="danger" disabled>Hang Up</button>
+      <button id="btnTestRing" class="secondary" style="margin-left: auto;">Test Ringtone</button>
     </div>
     <p class="status" id="statusText">Status: Waiting for Google Sign-In...</p>
   </div>
 
-  <!-- 4. Online Users Directory (Click to Call) -->
+  <!-- 4. Online Users Directory -->
   <div class="card" id="directoryCard" style="display: none;">
     <h3 style="font-size: 1rem; margin-bottom: 4px;">Online Users (Click to Talk)</h3>
-    <p style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 10px;">Open this page on a second device or browser signed into another Google account.</p>
+    <p style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 10px;">Click anywhere on the page once so your browser allows incoming call ringtones.</p>
     <div id="onlineUsersList" class="user-list">
       <div style="color: #64748b; font-size: 0.85rem;">Loading online users...</div>
     </div>
@@ -109,7 +126,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
     import {
-      getFirestore, collection, doc, setDoc, getDoc, updateDoc, addDoc,
+      getFirestore, collection, doc, setDoc, updateDoc, addDoc,
       onSnapshot, deleteDoc, getDocs, query, where, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -128,17 +145,112 @@
     const db = getFirestore(app);
     const provider = new GoogleAuthProvider();
 
-    // STUN servers for NAT traversal
     const rtcConfig = {
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
-        { urls: "stun:stun2.l.google.com:19302" },
-        { urls: "stun:stun3.l.google.com:19302" }
+        { urls: "stun:stun2.l.google.com:19302" }
       ],
       iceCandidatePoolSize: 10
     };
 
+    // =========================================================
+    // MESSENGER RINGTONE & RINGBACK SYNTHESIZER (Web Audio API)
+    // =========================================================
+    let audioCtx = null;
+    let ringInterval = null;
+
+    function unlockAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === "suspended") {
+        audioCtx.resume();
+      }
+    }
+    // Unlock audio context on first user interaction
+    document.addEventListener("click", unlockAudio, { once: true });
+
+    // Melodic Messenger-style Incoming Ringtone
+    function playIncomingChime() {
+      unlockAudio();
+      const now = audioCtx.currentTime;
+      // Bright, bubbly Messenger-inspired arpeggio notes (Hz)
+      const notes = [
+        { freq: 659.25, time: 0.00, dur: 0.14 }, // E5
+        { freq: 830.61, time: 0.12, dur: 0.14 }, // G#5
+        { freq: 987.77, time: 0.24, dur: 0.14 }, // B5
+        { freq: 1318.51, time: 0.36, dur: 0.35 }, // E6
+        { freq: 987.77, time: 0.56, dur: 0.14 }, // B5
+        { freq: 1318.51, time: 0.68, dur: 0.45 }  // E6
+      ];
+
+      notes.forEach(({ freq, time, dur }) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, now + time);
+
+        // Smooth bell-like envelope
+        gain.gain.setValueAtTime(0.001, now + time);
+        gain.gain.exponentialRampToValueAtTime(0.22, now + time + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + time + dur);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now + time);
+        osc.stop(now + time + dur + 0.05);
+      });
+    }
+
+    // Soft Outgoing Ringback Tone (when you are calling someone)
+    function playOutgoingPulse() {
+      unlockAudio();
+      const now = audioCtx.currentTime;
+      [523.25, 659.25].forEach((freq) => { // Soft C5 + E5 chord
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, now);
+
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.exponentialRampToValueAtTime(0.08, now + 0.08);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.1);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 1.15);
+      });
+    }
+
+    function startIncomingRing() {
+      stopRinging();
+      playIncomingChime();
+      ringInterval = setInterval(playIncomingChime, 2400);
+    }
+
+    function startOutgoingRing() {
+      stopRinging();
+      playOutgoingPulse();
+      ringInterval = setInterval(playOutgoingPulse, 2600);
+    }
+
+    function stopRinging() {
+      if (ringInterval) {
+        clearInterval(ringInterval);
+        ringInterval = null;
+      }
+    }
+
+    // Test button so user can hear & unlock audio anytime
+    document.getElementById("btnTestRing").onclick = () => {
+      playIncomingChime();
+    };
+
+    // =========================================================
+    // WEBRTC & FIREBASE SIGNALING
+    // =========================================================
     let pc = null;
     let localStream = null;
     let remoteStream = null;
@@ -149,7 +261,6 @@
     let incomingCallDoc = null;
     let unsubCallListeners = [];
 
-    // DOM Elements
     const statusText = document.getElementById("statusText");
     const localVideo = document.getElementById("localVideo");
     const remoteVideo = document.getElementById("remoteVideo");
@@ -160,8 +271,11 @@
     const btnHangup = document.getElementById("btnHangup");
     const incomingBanner = document.getElementById("incomingBanner");
 
-    // --- 1. Authentication & Online Presence ---
-    btnSignIn.onclick = () => signInWithPopup(auth, provider).catch(err => alert(err.message));
+    btnSignIn.onclick = () => {
+      unlockAudio();
+      signInWithPopup(auth, provider).catch(err => alert(err.message));
+    };
+
     btnSignOut.onclick = async () => {
       await hangUp();
       if (auth.currentUser) {
@@ -181,7 +295,6 @@
         document.getElementById("localLabel").textContent = `You (${user.displayName})`;
         statusText.textContent = "Status: Online & ready to talk.";
 
-        // Register user as online in Firestore
         await setDoc(doc(db, "users", user.uid), {
           uid: user.uid,
           name: user.displayName,
@@ -200,7 +313,6 @@
       }
     });
 
-    // --- 2. Live Online Users List ---
     function listenForOnlineUsers(myUid) {
       onSnapshot(collection(db, "users"), (snapshot) => {
         const list = document.getElementById("onlineUsersList");
@@ -239,7 +351,6 @@
       });
     }
 
-    // --- 3. Initialize Local Audio/Video & PeerConnection ---
     async function initMediaAndPeer(withVideo) {
       localStream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -261,14 +372,13 @@
         event.streams[0].getTracks().forEach((track) => {
           remoteStream.addTrack(track);
         });
-        // Ensure browser plays remote audio & video immediately
         remoteVideo.play().catch(() => {});
       };
 
       pc.onconnectionstatechange = () => {
         if (!pc) return;
-        statusText.textContent = `Status: Connection ${pc.connectionState}`;
         if (pc.connectionState === "connected") {
+          stopRinging();
           statusText.textContent = "Status: Connected — Live audio/video active!";
         } else if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
           hangUp();
@@ -287,12 +397,16 @@
       }
     }
 
-    // --- 4. Outgoing Call (Caller) ---
+    // Outgoing Call (Caller)
     async function startCall(targetUser, withVideo) {
       try {
-        statusText.textContent = `Calling ${targetUser.name}...`;
+        unlockAudio();
+        statusText.textContent = `Ringing ${targetUser.name}...`;
         document.getElementById("remoteLabel").textContent = targetUser.name;
         await initMediaAndPeer(withVideo);
+
+        // Start outgoing ringback sound
+        startOutgoingRing();
 
         const roomRef = doc(collection(db, "calls"));
         currentRoomId = roomRef.id;
@@ -316,7 +430,6 @@
           offer: { type: offer.type, sdp: offer.sdp }
         });
 
-        // Listen for answer or rejection
         const unsubRoom = onSnapshot(roomRef, async (snap) => {
           if (!snap.exists()) {
             hangUp();
@@ -324,18 +437,19 @@
           }
           const data = snap.data();
           if (data.status === "rejected") {
+            stopRinging();
             alert(`${targetUser.name} declined the call.`);
             hangUp();
             return;
           }
           if (!pc.currentRemoteDescription && data.answer) {
+            stopRinging(); // Stop ringback as soon as peer answers
             await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
             await flushPendingCandidates();
             statusText.textContent = `Talking with ${targetUser.name}...`;
           }
         });
 
-        // Listen for callee ICE candidates
         const unsubCandidates = onSnapshot(collection(roomRef, "calleeCandidates"), (snap) => {
           snap.docChanges().forEach(async (change) => {
             if (change.type === "added") {
@@ -351,12 +465,13 @@
 
         unsubCallListeners.push(unsubRoom, unsubCandidates);
       } catch (err) {
+        stopRinging();
         alert("Could not start call: " + err.message);
         hangUp();
       }
     }
 
-    // --- 5. Incoming Call Listener & Answer (Callee) ---
+    // Incoming Call Listener (Callee)
     function listenForIncomingCalls(myUid) {
       const q = query(
         collection(db, "calls"),
@@ -368,6 +483,7 @@
         if (snap.empty || currentRoomId) {
           incomingBanner.style.display = "none";
           incomingCallDoc = null;
+          if (!currentRoomId) stopRinging();
           return;
         }
         incomingCallDoc = snap.docs[0];
@@ -375,10 +491,14 @@
         document.getElementById("callerNameText").textContent = `${data.callerName} is calling you...`;
         document.getElementById("callTypeText").textContent = data.withVideo ? "Video + Voice Call" : "Voice Only Call";
         incomingBanner.style.display = "flex";
+
+        // Play Messenger-style incoming ringtone
+        startIncomingRing();
       });
     }
 
     document.getElementById("btnRejectCall").onclick = async () => {
+      stopRinging();
       if (!incomingCallDoc) return;
       await updateDoc(incomingCallDoc.ref, { status: "rejected" });
       incomingBanner.style.display = "none";
@@ -386,6 +506,7 @@
     };
 
     document.getElementById("btnAcceptCall").onclick = async () => {
+      stopRinging();
       if (!incomingCallDoc) return;
       const roomRef = incomingCallDoc.ref;
       const callData = incomingCallDoc.data();
@@ -416,12 +537,10 @@
 
         statusText.textContent = `Talking with ${callData.callerName}...`;
 
-        // Listen if caller hangs up
         const unsubRoom = onSnapshot(roomRef, (snap) => {
           if (!snap.exists()) hangUp();
         });
 
-        // Listen for caller ICE candidates
         const unsubCandidates = onSnapshot(collection(roomRef, "callerCandidates"), (snap) => {
           snap.docChanges().forEach(async (change) => {
             if (change.type === "added") {
@@ -442,7 +561,6 @@
       }
     };
 
-    // --- 6. Mute, Camera Toggle & Hang Up ---
     btnMute.onclick = () => {
       isMuted = !isMuted;
       localStream.getAudioTracks().forEach((t) => (t.enabled = !isMuted));
@@ -456,6 +574,7 @@
     };
 
     async function hangUp() {
+      stopRinging();
       unsubCallListeners.forEach((unsub) => unsub());
       unsubCallListeners = [];
 
