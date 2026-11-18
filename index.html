@@ -3,23 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Messenger - Live Voice & Video Call</title>
+  <title>Messenger - Group Voice & Video Call</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
     body { background: #0f172a; color: #f8fafc; display: flex; flex-direction: column; align-items: center; padding: 20px; min-height: 100vh; }
     h1 { font-size: 1.5rem; margin-bottom: 16px; }
 
-    .card { width: 100%; max-width: 900px; background: #1e293b; padding: 16px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 16px; }
+    .card { width: 100%; max-width: 1100px; background: #1e293b; padding: 16px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 16px; }
     .auth-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
     .user-info { display: flex; align-items: center; gap: 12px; }
     .user-info img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
 
-    .videos { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; width: 100%; max-width: 900px; margin-bottom: 16px; }
+    /* Dynamic Grid for Group Video Feeds */
+    .videos { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; width: 100%; max-width: 1100px; margin-bottom: 16px; }
     .video-box { background: #1e293b; border-radius: 12px; overflow: hidden; position: relative; aspect-ratio: 16/9; border: 1px solid #334155; }
     video { width: 100%; height: 100%; object-fit: cover; background: #000; }
     .label { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; }
 
-    .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .controls, .room-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
     button { padding: 10px 16px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; background: #3b82f6; color: white; transition: 0.2s; }
     button:hover { background: #2563eb; }
     button:disabled { background: #475569; cursor: not-allowed; }
@@ -32,51 +33,18 @@
     button.secondary { background: #334155; }
     button.secondary:hover { background: #475569; }
 
+    input { padding: 10px 12px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #38bdf8; font-family: monospace; font-size: 0.9rem; flex: 1; min-width: 220px; }
     .status { font-size: 0.85rem; color: #38bdf8; margin-top: 10px; font-weight: 500; }
-
-    /* Online Users List & Incoming Call Banner */
-    .user-list { display: grid; gap: 8px; margin-top: 10px; }
-    .user-row { display: flex; align-items: center; justify-content: space-between; background: #0f172a; padding: 10px 14px; border-radius: 8px; border: 1px solid #334155; }
-    
-    @keyframes pulseRing {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
-      50% { box-shadow: 0 0 0 12px rgba(16, 185, 129, 0); }
-    }
-    .incoming-banner {
-      background: #065f46;
-      border: 1px solid #10b981;
-      padding: 16px;
-      border-radius: 12px;
-      display: none;
-      justify-content: space-between;
-      align-items: center;
-      width: 100%;
-      max-width: 900px;
-      margin-bottom: 16px;
-      animation: pulseRing 1.5s infinite;
-    }
   </style>
 </head>
 <body>
 
-  <h1>Messenger Voice & Video Call</h1>
-
-  <!-- Incoming Call Notification Banner -->
-  <div id="incomingBanner" class="incoming-banner">
-    <div>
-      <strong id="callerNameText" style="font-size: 1.05rem;">Incoming Call...</strong>
-      <div style="font-size: 0.85rem; color: #a7f3d0;" id="callTypeText">Video & Voice Call</div>
-    </div>
-    <div style="display: flex; gap: 10px;">
-      <button id="btnAcceptCall" class="success">Answer</button>
-      <button id="btnRejectCall" class="danger">Decline</button>
-    </div>
-  </div>
+  <h1>Messenger Group Voice & Video Call</h1>
 
   <!-- 1. Google Sign-In -->
   <div class="card auth-bar">
     <div id="loggedOutView" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-      <span style="color: #94a3b8; font-size: 0.9rem;">Sign in with Google to talk with other users</span>
+      <span style="color: #94a3b8; font-size: 0.9rem;">Sign in with Google to create or join group conference rooms</span>
       <button id="btnSignIn" class="google">Sign in with Google</button>
     </div>
 
@@ -90,44 +58,40 @@
     </div>
   </div>
 
-  <!-- 2. Video & Audio Feeds -->
-  <div class="videos">
-    <div class="video-box">
+  <!-- 2. Dynamic Video Feeds Grid -->
+  <div class="videos" id="videoGrid">
+    <div class="video-box" id="localVideoContainer">
       <video id="localVideo" autoplay playsinline muted></video>
       <div class="label" id="localLabel">You (Local)</div>
     </div>
-    <div class="video-box">
-      <video id="remoteVideo" autoplay playsinline></video>
-      <div class="label" id="remoteLabel">Remote Peer</div>
-    </div>
   </div>
 
-  <!-- 3. In-Call Audio/Video Controls -->
+  <!-- 3. Group Room Controls -->
   <div class="card">
-    <div class="controls">
+    <div class="controls" style="margin-bottom: 14px;">
+      <button id="btnVideoCall" disabled>1. Enable Video + Mic</button>
+      <button id="btnVoiceCall" disabled>1. Enable Mic Only</button>
       <button id="btnMute" class="secondary" disabled>Mute Mic</button>
       <button id="btnCam" class="secondary" disabled>Turn Off Cam</button>
-      <button id="btnHangup" class="danger" disabled>Hang Up</button>
-      <button id="btnTestRing" class="secondary" style="margin-left: auto;">Test Ringtone</button>
+      <button id="btnHangup" class="danger" disabled>Leave Room</button>
+    </div>
+
+    <div class="room-controls">
+      <button id="btnCreateRoom" disabled>2. Create Group Room</button>
+      <input id="roomIdInput" type="text" placeholder="Enter Group Room ID to join..." />
+      <button id="btnCopyRoom" class="secondary" disabled>Copy ID</button>
+      <button id="btnJoinRoom" disabled>3. Join Group Room</button>
     </div>
     <p class="status" id="statusText">Status: Waiting for Google Sign-In...</p>
   </div>
 
-  <!-- 4. Online Users Directory -->
-  <div class="card" id="directoryCard" style="display: none;">
-    <h3 style="font-size: 1rem; margin-bottom: 4px;">Online Users (Click to Talk)</h3>
-    <p style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 10px;">Click anywhere on the page once so your browser allows incoming call ringtones.</p>
-    <div id="onlineUsersList" class="user-list">
-      <div style="color: #64748b; font-size: 0.85rem;">Loading online users...</div>
-    </div>
-  </div>
-
+  <!-- Firebase Modular SDK & Mesh Signaling Script -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
     import {
-      getFirestore, collection, doc, setDoc, updateDoc, addDoc,
-      onSnapshot, deleteDoc, getDocs, query, where, serverTimestamp
+      getFirestore, collection, doc, setDoc, getDoc, updateDoc, addDoc,
+      onSnapshot, deleteDoc, getDocs, arrayUnion, arrayRemove
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -154,465 +118,275 @@
       iceCandidatePoolSize: 10
     };
 
-    // =========================================================
-    // MESSENGER RINGTONE & RINGBACK SYNTHESIZER (Web Audio API)
-    // =========================================================
-    let audioCtx = null;
-    let ringInterval = null;
-
-    function unlockAudio() {
-      if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      if (audioCtx.state === "suspended") {
-        audioCtx.resume();
-      }
-    }
-    // Unlock audio context on first user interaction
-    document.addEventListener("click", unlockAudio, { once: true });
-
-    // Melodic Messenger-style Incoming Ringtone
-    function playIncomingChime() {
-      unlockAudio();
-      const now = audioCtx.currentTime;
-      // Bright, bubbly Messenger-inspired arpeggio notes (Hz)
-      const notes = [
-        { freq: 659.25, time: 0.00, dur: 0.14 }, // E5
-        { freq: 830.61, time: 0.12, dur: 0.14 }, // G#5
-        { freq: 987.77, time: 0.24, dur: 0.14 }, // B5
-        { freq: 1318.51, time: 0.36, dur: 0.35 }, // E6
-        { freq: 987.77, time: 0.56, dur: 0.14 }, // B5
-        { freq: 1318.51, time: 0.68, dur: 0.45 }  // E6
-      ];
-
-      notes.forEach(({ freq, time, dur }) => {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(freq, now + time);
-
-        // Smooth bell-like envelope
-        gain.gain.setValueAtTime(0.001, now + time);
-        gain.gain.exponentialRampToValueAtTime(0.22, now + time + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + time + dur);
-
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start(now + time);
-        osc.stop(now + time + dur + 0.05);
-      });
-    }
-
-    // Soft Outgoing Ringback Tone (when you are calling someone)
-    function playOutgoingPulse() {
-      unlockAudio();
-      const now = audioCtx.currentTime;
-      [523.25, 659.25].forEach((freq) => { // Soft C5 + E5 chord
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(freq, now);
-
-        gain.gain.setValueAtTime(0.001, now);
-        gain.gain.exponentialRampToValueAtTime(0.08, now + 0.08);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.1);
-
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start(now);
-        osc.stop(now + 1.15);
-      });
-    }
-
-    function startIncomingRing() {
-      stopRinging();
-      playIncomingChime();
-      ringInterval = setInterval(playIncomingChime, 2400);
-    }
-
-    function startOutgoingRing() {
-      stopRinging();
-      playOutgoingPulse();
-      ringInterval = setInterval(playOutgoingPulse, 2600);
-    }
-
-    function stopRinging() {
-      if (ringInterval) {
-        clearInterval(ringInterval);
-        ringInterval = null;
-      }
-    }
-
-    // Test button so user can hear & unlock audio anytime
-    document.getElementById("btnTestRing").onclick = () => {
-      playIncomingChime();
-    };
-
-    // =========================================================
-    // WEBRTC & FIREBASE SIGNALING
-    // =========================================================
-    let pc = null;
     let localStream = null;
-    let remoteStream = null;
     let currentRoomId = null;
-    let pendingCandidates = [];
+    let myPeerId = Math.random().toString(36).substring(2, 9);
+    let peers = {}; // Map of peerId -> { pc, remoteStream }
+    let unsubRoom = null;
     let isMuted = false;
     let isCamOff = false;
-    let incomingCallDoc = null;
-    let unsubCallListeners = [];
 
     const statusText = document.getElementById("statusText");
     const localVideo = document.getElementById("localVideo");
-    const remoteVideo = document.getElementById("remoteVideo");
+    const videoGrid = document.getElementById("videoGrid");
+    const roomIdInput = document.getElementById("roomIdInput");
+
     const btnSignIn = document.getElementById("btnSignIn");
     const btnSignOut = document.getElementById("btnSignOut");
+    const btnVideoCall = document.getElementById("btnVideoCall");
+    const btnVoiceCall = document.getElementById("btnVoiceCall");
     const btnMute = document.getElementById("btnMute");
     const btnCam = document.getElementById("btnCam");
     const btnHangup = document.getElementById("btnHangup");
-    const incomingBanner = document.getElementById("incomingBanner");
+    const btnCreateRoom = document.getElementById("btnCreateRoom");
+    const btnCopyRoom = document.getElementById("btnCopyRoom");
+    const btnJoinRoom = document.getElementById("btnJoinRoom");
 
-    btnSignIn.onclick = () => {
-      unlockAudio();
-      signInWithPopup(auth, provider).catch(err => alert(err.message));
-    };
-
+    // 1. Google Sign-In
+    btnSignIn.onclick = () => signInWithPopup(auth, provider).catch(err => alert(err.message));
     btnSignOut.onclick = async () => {
-      await hangUp();
-      if (auth.currentUser) {
-        await deleteDoc(doc(db, "users", auth.currentUser.uid)).catch(() => {});
-      }
+      await leaveRoom();
       signOut(auth);
     };
 
-    onAuthStateChanged(auth, async (user) => {
+    onAuthStateChanged(auth, (user) => {
       if (user) {
         document.getElementById("loggedOutView").style.display = "none";
         document.getElementById("loggedInView").style.display = "flex";
-        document.getElementById("directoryCard").style.display = "block";
         document.getElementById("userName").textContent = user.displayName;
         document.getElementById("userEmail").textContent = user.email;
         document.getElementById("userPic").src = user.photoURL;
         document.getElementById("localLabel").textContent = `You (${user.displayName})`;
-        statusText.textContent = "Status: Online & ready to talk.";
 
-        await setDoc(doc(db, "users", user.uid), {
-          uid: user.uid,
-          name: user.displayName,
-          email: user.email,
-          photo: user.photoURL,
-          onlineAt: serverTimestamp()
-        });
-
-        listenForOnlineUsers(user.uid);
-        listenForIncomingCalls(user.uid);
+        btnVideoCall.disabled = false;
+        btnVoiceCall.disabled = false;
+        statusText.textContent = "Status: Signed in. Enable camera/mic to start group call.";
       } else {
         document.getElementById("loggedOutView").style.display = "flex";
         document.getElementById("loggedInView").style.display = "none";
-        document.getElementById("directoryCard").style.display = "none";
+        btnVideoCall.disabled = true;
+        btnVoiceCall.disabled = true;
         statusText.textContent = "Status: Waiting for Google Sign-In...";
       }
     });
 
-    function listenForOnlineUsers(myUid) {
-      onSnapshot(collection(db, "users"), (snapshot) => {
-        const list = document.getElementById("onlineUsersList");
-        list.innerHTML = "";
-        let count = 0;
-
-        snapshot.forEach((docSnap) => {
-          const u = docSnap.data();
-          if (u.uid === myUid) return;
-          count++;
-
-          const row = document.createElement("div");
-          row.className = "user-row";
-          row.innerHTML = `
-            <div style="display:flex; align-items:center; gap:10px;">
-              <img src="${u.photo || ''}" style="width:32px; height:32px; border-radius:50%;" />
-              <div>
-                <div style="font-weight:600; font-size:0.9rem;">${u.name}</div>
-                <div style="font-size:0.75rem; color:#94a3b8;">${u.email}</div>
-              </div>
-            </div>
-            <div style="display:flex; gap:8px;">
-              <button class="secondary" data-voice="${u.uid}">Voice Call</button>
-              <button data-video="${u.uid}">Video Call</button>
-            </div>
-          `;
-
-          row.querySelector(`[data-voice="${u.uid}"]`).onclick = () => startCall(u, false);
-          row.querySelector(`[data-video="${u.uid}"]`).onclick = () => startCall(u, true);
-          list.appendChild(row);
+    // 2. Start Local Media
+    async function startMedia(withVideo) {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true },
+          video: withVideo
         });
+        localVideo.srcObject = localStream;
 
-        if (count === 0) {
-          list.innerHTML = `<div style="color:#64748b; font-size:0.85rem;">No other users online right now. Open this app in another browser/device with a second Google account to test!</div>`;
-        }
-      });
-    }
-
-    async function initMediaAndPeer(withVideo) {
-      localStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        video: withVideo
-      });
-
-      remoteStream = new MediaStream();
-      localVideo.srcObject = localStream;
-      remoteVideo.srcObject = remoteStream;
-
-      pc = new RTCPeerConnection(rtcConfig);
-      pendingCandidates = [];
-
-      localStream.getTracks().forEach((track) => {
-        pc.addTrack(track, localStream);
-      });
-
-      pc.ontrack = (event) => {
-        event.streams[0].getTracks().forEach((track) => {
-          remoteStream.addTrack(track);
-        });
-        remoteVideo.play().catch(() => {});
-      };
-
-      pc.onconnectionstatechange = () => {
-        if (!pc) return;
-        if (pc.connectionState === "connected") {
-          stopRinging();
-          statusText.textContent = "Status: Connected — Live audio/video active!";
-        } else if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
-          hangUp();
-        }
-      };
-
-      btnMute.disabled = false;
-      btnCam.disabled = !withVideo;
-      btnHangup.disabled = false;
-    }
-
-    async function flushPendingCandidates() {
-      while (pendingCandidates.length > 0) {
-        const candidate = pendingCandidates.shift();
-        await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+        btnVideoCall.disabled = true;
+        btnVoiceCall.disabled = true;
+        btnMute.disabled = false;
+        btnCam.disabled = !withVideo;
+        btnHangup.disabled = false;
+        btnCreateRoom.disabled = false;
+        btnJoinRoom.disabled = false;
+        statusText.textContent = "Status: Media ready. Create or Join a Group Room ID.";
+      } catch (err) {
+        alert("Media access error: " + err.message);
       }
     }
 
-    // Outgoing Call (Caller)
-    async function startCall(targetUser, withVideo) {
-      try {
-        unlockAudio();
-        statusText.textContent = `Ringing ${targetUser.name}...`;
-        document.getElementById("remoteLabel").textContent = targetUser.name;
-        await initMediaAndPeer(withVideo);
+    btnVideoCall.onclick = () => startMedia(true);
+    btnVoiceCall.onclick = () => startMedia(false);
 
-        // Start outgoing ringback sound
-        startOutgoingRing();
+    // 3. Create Group Room
+    btnCreateRoom.onclick = async () => {
+      btnCreateRoom.disabled = true;
+      btnJoinRoom.disabled = true;
 
-        const roomRef = doc(collection(db, "calls"));
-        currentRoomId = roomRef.id;
+      const roomRef = doc(collection(db, "groupRooms"));
+      currentRoomId = roomRef.id;
+      roomIdInput.value = currentRoomId;
+      btnCopyRoom.disabled = false;
 
-        const callerCandidatesCol = collection(roomRef, "callerCandidates");
-        pc.onicecandidate = (event) => {
-          if (event.candidate) {
-            addDoc(callerCandidatesCol, event.candidate.toJSON());
+      await setDoc(roomRef, {
+        host: auth.currentUser.displayName,
+        participants: [myPeerId]
+      });
+
+      statusText.textContent = `Group Room Created! Share Room ID: ${currentRoomId}`;
+      listenToGroupRoom(roomRef);
+    };
+
+    btnCopyRoom.onclick = () => {
+      navigator.clipboard.writeText(roomIdInput.value);
+      btnCopyRoom.textContent = "Copied!";
+      setTimeout(() => (btnCopyRoom.textContent = "Copy ID"), 1500);
+    };
+
+    // 4. Join Group Room
+    btnJoinRoom.onclick = async () => {
+      const roomId = roomIdInput.value.trim();
+      if (!roomId) return alert("Enter a Group Room ID first.");
+
+      const roomRef = doc(db, "groupRooms", roomId);
+      const roomSnap = await getDoc(roomRef);
+      if (!roomSnap.exists()) return alert("Group Room not found!");
+
+      currentRoomId = roomId;
+      btnCreateRoom.disabled = true;
+      btnJoinRoom.disabled = true;
+      btnCopyRoom.disabled = false;
+
+      await updateDoc(roomRef, {
+        participants: arrayUnion(myPeerId)
+      });
+
+      statusText.textContent = "Status: Joined group room. Connecting to peers...";
+      listenToGroupRoom(roomRef);
+    };
+
+    // 5. Mesh Signaling Listener
+    function listenToGroupRoom(roomRef) {
+      unsubRoom = onSnapshot(roomRef, async (snapshot) => {
+        if (!snapshot.exists()) return;
+        const data = snapshot.data();
+        const participants = data.participants || [];
+
+        // For every participant in the room except myself
+        for (const peerId of participants) {
+          if (peerId !== myPeerId && !peers[peerId]) {
+            // Initiate connection as caller to new peer
+            await createPeerConnection(peerId, true, roomRef);
           }
-        };
+        }
+      });
+    }
 
+    // Create RTCPeerConnection for a specific peer
+    async function createPeerConnection(peerId, isInitiator, roomRef) {
+      const pc = new RTCPeerConnection(rtcConfig);
+      const remoteStream = new MediaStream();
+
+      peers[peerId] = { pc, remoteStream };
+
+      // Add local tracks
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+      // Handle remote tracks
+      pc.ontrack = (event) => {
+        event.streams[0].getTracks().forEach(track => remoteStream.addTrack(track));
+        addRemoteVideoElement(peerId, remoteStream);
+      };
+
+      // ICE candidates signaling subcollection
+      const candidatesCol = collection(roomRef, `signals_${myPeerId}_${peerId}`);
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          addDoc(candidatesCol, event.candidate.toJSON());
+        }
+      };
+
+      // If initiator, create Offer
+      if (isInitiator) {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-
-        await setDoc(roomRef, {
-          callerUid: auth.currentUser.uid,
-          callerName: auth.currentUser.displayName,
-          calleeUid: targetUser.uid,
-          withVideo: withVideo,
-          status: "ringing",
+        await setDoc(doc(roomRef, `offer_${myPeerId}_${peerId}`), {
           offer: { type: offer.type, sdp: offer.sdp }
         });
-
-        const unsubRoom = onSnapshot(roomRef, async (snap) => {
-          if (!snap.exists()) {
-            hangUp();
-            return;
-          }
-          const data = snap.data();
-          if (data.status === "rejected") {
-            stopRinging();
-            alert(`${targetUser.name} declined the call.`);
-            hangUp();
-            return;
-          }
-          if (!pc.currentRemoteDescription && data.answer) {
-            stopRinging(); // Stop ringback as soon as peer answers
-            await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-            await flushPendingCandidates();
-            statusText.textContent = `Talking with ${targetUser.name}...`;
-          }
-        });
-
-        const unsubCandidates = onSnapshot(collection(roomRef, "calleeCandidates"), (snap) => {
-          snap.docChanges().forEach(async (change) => {
-            if (change.type === "added") {
-              const cand = change.doc.data();
-              if (pc && pc.remoteDescription) {
-                await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
-              } else {
-                pendingCandidates.push(cand);
-              }
-            }
-          });
-        });
-
-        unsubCallListeners.push(unsubRoom, unsubCandidates);
-      } catch (err) {
-        stopRinging();
-        alert("Could not start call: " + err.message);
-        hangUp();
       }
-    }
 
-    // Incoming Call Listener (Callee)
-    function listenForIncomingCalls(myUid) {
-      const q = query(
-        collection(db, "calls"),
-        where("calleeUid", "==", myUid),
-        where("status", "==", "ringing")
-      );
-
-      onSnapshot(q, (snap) => {
-        if (snap.empty || currentRoomId) {
-          incomingBanner.style.display = "none";
-          incomingCallDoc = null;
-          if (!currentRoomId) stopRinging();
-          return;
+      // Listen for Offer/Answer & Candidates
+      onSnapshot(doc(roomRef, `offer_${peerId}_${myPeerId}`), async (snap) => {
+        if (snap.exists() && !pc.currentRemoteDescription) {
+          const offerData = snap.data().offer;
+          await pc.setRemoteDescription(new RTCSessionDescription(offerData));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          await setDoc(doc(roomRef, `answer_${myPeerId}_${peerId}`), {
+            answer: { type: answer.type, sdp: answer.sdp }
+          });
         }
-        incomingCallDoc = snap.docs[0];
-        const data = incomingCallDoc.data();
-        document.getElementById("callerNameText").textContent = `${data.callerName} is calling you...`;
-        document.getElementById("callTypeText").textContent = data.withVideo ? "Video + Voice Call" : "Voice Only Call";
-        incomingBanner.style.display = "flex";
+      });
 
-        // Play Messenger-style incoming ringtone
-        startIncomingRing();
+      onSnapshot(doc(roomRef, `answer_${peerId}_${myPeerId}`), async (snap) => {
+        if (snap.exists() && !pc.currentRemoteDescription) {
+          const answerData = snap.data().answer;
+          await pc.setRemoteDescription(new RTCSessionDescription(answerData));
+        }
+      });
+
+      onSnapshot(collection(roomRef, `signals_${peerId}_${myPeerId}`), (snapshot) => {
+        snapshot.docChanges().forEach(async (change) => {
+          if (change.type === "added") {
+            const cand = change.doc.data();
+            await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+          }
+        });
       });
     }
 
-    document.getElementById("btnRejectCall").onclick = async () => {
-      stopRinging();
-      if (!incomingCallDoc) return;
-      await updateDoc(incomingCallDoc.ref, { status: "rejected" });
-      incomingBanner.style.display = "none";
-      incomingCallDoc = null;
-    };
+    // UI helper for remote participant video boxes
+    function addRemoteVideoElement(peerId, stream) {
+      if (document.getElementById(`video_${peerId}`)) return;
 
-    document.getElementById("btnAcceptCall").onclick = async () => {
-      stopRinging();
-      if (!incomingCallDoc) return;
-      const roomRef = incomingCallDoc.ref;
-      const callData = incomingCallDoc.data();
-      currentRoomId = roomRef.id;
-      incomingBanner.style.display = "none";
+      const box = document.createElement("div");
+      box.className = "video-box";
+      box.id = `box_${peerId}`;
+      box.innerHTML = `
+        <video id="video_${peerId}" autoplay playsinline></video>
+        <div class="label">Participant (${peerId})</div>
+      `;
+      videoGrid.appendChild(box);
+      document.getElementById(`video_${peerId}`).srcObject = stream;
+    }
 
-      try {
-        document.getElementById("remoteLabel").textContent = callData.callerName;
-        await initMediaAndPeer(callData.withVideo);
-
-        const calleeCandidatesCol = collection(roomRef, "calleeCandidates");
-        pc.onicecandidate = (event) => {
-          if (event.candidate) {
-            addDoc(calleeCandidatesCol, event.candidate.toJSON());
-          }
-        };
-
-        await pc.setRemoteDescription(new RTCSessionDescription(callData.offer));
-        await flushPendingCandidates();
-
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-
-        await updateDoc(roomRef, {
-          status: "connected",
-          answer: { type: answer.type, sdp: answer.sdp }
-        });
-
-        statusText.textContent = `Talking with ${callData.callerName}...`;
-
-        const unsubRoom = onSnapshot(roomRef, (snap) => {
-          if (!snap.exists()) hangUp();
-        });
-
-        const unsubCandidates = onSnapshot(collection(roomRef, "callerCandidates"), (snap) => {
-          snap.docChanges().forEach(async (change) => {
-            if (change.type === "added") {
-              const cand = change.doc.data();
-              if (pc && pc.remoteDescription) {
-                await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
-              } else {
-                pendingCandidates.push(cand);
-              }
-            }
-          });
-        });
-
-        unsubCallListeners.push(unsubRoom, unsubCandidates);
-      } catch (err) {
-        alert("Failed to answer call: " + err.message);
-        hangUp();
-      }
-    };
-
+    // 6. Audio/Video Controls & Leave
     btnMute.onclick = () => {
       isMuted = !isMuted;
-      localStream.getAudioTracks().forEach((t) => (t.enabled = !isMuted));
+      localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
       btnMute.textContent = isMuted ? "Unmute Mic" : "Mute Mic";
     };
 
     btnCam.onclick = () => {
       isCamOff = !isCamOff;
-      localStream.getVideoTracks().forEach((t) => (t.enabled = !isCamOff));
+      localStream.getVideoTracks().forEach(t => t.enabled = !isCamOff);
       btnCam.textContent = isCamOff ? "Turn On Cam" : "Turn Off Cam";
     };
 
-    async function hangUp() {
-      stopRinging();
-      unsubCallListeners.forEach((unsub) => unsub());
-      unsubCallListeners = [];
+    async function leaveRoom() {
+      if (unsubRoom) unsubRoom();
 
-      if (pc) {
-        pc.close();
-        pc = null;
-      }
+      Object.keys(peers).forEach(peerId => {
+        peers[peerId].pc.close();
+        const el = document.getElementById(`box_${peerId}`);
+        if (el) el.remove();
+      });
+      peers = {};
+
       if (localStream) {
-        localStream.getTracks().forEach((t) => t.stop());
+        localStream.getTracks().forEach(t => t.stop());
         localStream = null;
       }
       localVideo.srcObject = null;
-      remoteVideo.srcObject = null;
-      document.getElementById("remoteLabel").textContent = "Remote Peer";
 
       if (currentRoomId) {
-        const roomRef = doc(db, "calls", currentRoomId);
-        const c1 = await getDocs(collection(roomRef, "calleeCandidates")).catch(() => []);
-        c1.forEach((d) => deleteDoc(d.ref));
-        const c2 = await getDocs(collection(roomRef, "callerCandidates")).catch(() => []);
-        c2.forEach((d) => deleteDoc(d.ref));
-        await deleteDoc(roomRef).catch(() => {});
+        const roomRef = doc(db, "groupRooms", currentRoomId);
+        await updateDoc(roomRef, {
+          participants: arrayRemove(myPeerId)
+        }).catch(() => {});
         currentRoomId = null;
       }
 
+      roomIdInput.value = "";
+      btnCopyRoom.disabled = true;
+      btnVideoCall.disabled = !auth.currentUser;
+      btnVoiceCall.disabled = !auth.currentUser;
       btnMute.disabled = true;
       btnCam.disabled = true;
       btnHangup.disabled = true;
-      isMuted = false;
-      isCamOff = false;
-      btnMute.textContent = "Mute Mic";
-      btnCam.textContent = "Turn Off Cam";
-      if (auth.currentUser) {
-        statusText.textContent = "Status: Call ended. Ready to talk.";
-      }
+      btnCreateRoom.disabled = true;
+      btnJoinRoom.disabled = true;
+      statusText.textContent = "Status: Left group room.";
     }
 
-    btnHangup.onclick = hangUp;
+    btnHangup.onclick = leaveRoom;
   </script>
 </body>
 </html>
