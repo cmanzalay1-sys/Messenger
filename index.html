@@ -36,7 +36,6 @@
     .status { font-size: 0.85rem; color: #38bdf8; font-weight: 500; }
     .timer { font-size: 0.9rem; font-family: monospace; color: #10b981; font-weight: 700; background: rgba(16, 185, 129, 0.1); padding: 4px 10px; border-radius: 6px; display: none; }
 
-    /* Online Users List & Incoming Call Banner */
     .user-list { display: grid; gap: 8px; margin-top: 10px; }
     .user-row { display: flex; align-items: center; justify-content: space-between; background: #0f172a; padding: 10px 14px; border-radius: 8px; border: 1px solid #334155; }
     
@@ -159,7 +158,7 @@
       iceCandidatePoolSize: 10
     };
 
-    // --- Web Audio API Ringtone & Timer ---
+    // --- Exact Messenger Dual-Tone Ringtone Synthesizer ---
     let audioCtx = null;
     let ringInterval = null;
     let timerInterval = null;
@@ -175,33 +174,39 @@
     }
     document.addEventListener("click", unlockAudio, { once: true });
 
-    function playIncomingChime() {
+    // Exact Messenger Call Ringtone Notes Sequence (Double-beep rhythm)
+    function playMessengerRing() {
       unlockAudio();
       const now = audioCtx.currentTime;
-      const notes = [
-        { freq: 659.25, time: 0.00, dur: 0.14 },
-        { freq: 830.61, time: 0.12, dur: 0.14 },
-        { freq: 987.77, time: 0.24, dur: 0.14 },
-        { freq: 1318.51, time: 0.36, dur: 0.35 },
-        { freq: 987.77, time: 0.56, dur: 0.14 },
-        { freq: 1318.51, time: 0.68, dur: 0.45 }
+      
+      // Messenger ring pattern: Two crisp harmonic pairs spaced out
+      const beats = [
+        { freq1: 783.99, freq2: 1046.50, time: 0.00, dur: 0.12 }, // G5 + C6
+        { freq1: 783.99, freq2: 1046.50, time: 0.15, dur: 0.12 }, // G5 + C6
+        { freq1: 659.25, freq2: 880.00,  time: 0.45, dur: 0.18 }, // E5 + A5
+        { freq1: 783.99, freq2: 1046.50, time: 0.70, dur: 0.25 }  // G5 + C6
       ];
 
-      notes.forEach(({ freq, time, dur }) => {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(freq, now + time);
-        gain.gain.setValueAtTime(0.001, now + time);
-        gain.gain.exponentialRampToValueAtTime(0.22, now + time + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + time + dur);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start(now + time);
-        osc.stop(now + time + dur + 0.05);
+      beats.forEach(({ freq1, freq2, time, dur }) => {
+        [freq1, freq2].forEach((freq) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(freq, now + time);
+
+          gain.gain.setValueAtTime(0.001, now + time);
+          gain.gain.exponentialRampToValueAtTime(0.18, now + time + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + time + dur);
+
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now + time);
+          osc.stop(now + time + dur + 0.05);
+        });
       });
     }
 
+    // Outgoing Ringback Tone
     function playOutgoingPulse() {
       unlockAudio();
       const now = audioCtx.currentTime;
@@ -222,8 +227,8 @@
 
     function startIncomingRing() {
       stopRinging();
-      playIncomingChime();
-      ringInterval = setInterval(playIncomingChime, 2400);
+      playMessengerRing();
+      ringInterval = setInterval(playMessengerRing, 2200); // Repeat every 2.2s like Messenger
     }
 
     function startOutgoingRing() {
@@ -263,7 +268,7 @@
       callTimer.textContent = "00:00";
     }
 
-    document.getElementById("btnTestRing").onclick = () => playIncomingChime();
+    document.getElementById("btnTestRing").onclick = () => playMessengerRing();
 
     // --- WebRTC & Firebase Signaling ---
     let pc = null;
