@@ -32,7 +32,9 @@
     button.secondary { background: #334155; }
     button.secondary:hover { background: #475569; }
 
-    .status { font-size: 0.85rem; color: #38bdf8; margin-top: 10px; font-weight: 500; }
+    .status-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; flex-wrap: wrap; gap: 8px; }
+    .status { font-size: 0.85rem; color: #38bdf8; font-weight: 500; }
+    .timer { font-size: 0.9rem; font-family: monospace; color: #10b981; font-weight: 700; background: rgba(16, 185, 129, 0.1); padding: 4px 10px; border-radius: 6px; display: none; }
 
     /* Online Users List & Incoming Call Banner */
     .user-list { display: grid; gap: 8px; margin-top: 10px; }
@@ -110,7 +112,10 @@
       <button id="btnHangup" class="danger" disabled>Hang Up</button>
       <button id="btnTestRing" class="secondary" style="margin-left: auto;">Test Ringtone</button>
     </div>
-    <p class="status" id="statusText">Status: Waiting for Google Sign-In...</p>
+    <div class="status-bar">
+      <p class="status" id="statusText">Status: Waiting for Google Sign-In...</p>
+      <div class="timer" id="callTimer">00:00</div>
+    </div>
   </div>
 
   <!-- 4. Online Users Directory -->
@@ -154,11 +159,11 @@
       iceCandidatePoolSize: 10
     };
 
-    // =========================================================
-    // MESSENGER RINGTONE & RINGBACK SYNTHESIZER (Web Audio API)
-    // =========================================================
+    // --- Web Audio API Ringtone & Timer ---
     let audioCtx = null;
     let ringInterval = null;
+    let timerInterval = null;
+    let secondsElapsed = 0;
 
     function unlockAudio() {
       if (!audioCtx) {
@@ -168,21 +173,18 @@
         audioCtx.resume();
       }
     }
-    // Unlock audio context on first user interaction
     document.addEventListener("click", unlockAudio, { once: true });
 
-    // Melodic Messenger-style Incoming Ringtone
     function playIncomingChime() {
       unlockAudio();
       const now = audioCtx.currentTime;
-      // Bright, bubbly Messenger-inspired arpeggio notes (Hz)
       const notes = [
-        { freq: 659.25, time: 0.00, dur: 0.14 }, // E5
-        { freq: 830.61, time: 0.12, dur: 0.14 }, // G#5
-        { freq: 987.77, time: 0.24, dur: 0.14 }, // B5
-        { freq: 1318.51, time: 0.36, dur: 0.35 }, // E6
-        { freq: 987.77, time: 0.56, dur: 0.14 }, // B5
-        { freq: 1318.51, time: 0.68, dur: 0.45 }  // E6
+        { freq: 659.25, time: 0.00, dur: 0.14 },
+        { freq: 830.61, time: 0.12, dur: 0.14 },
+        { freq: 987.77, time: 0.24, dur: 0.14 },
+        { freq: 1318.51, time: 0.36, dur: 0.35 },
+        { freq: 987.77, time: 0.56, dur: 0.14 },
+        { freq: 1318.51, time: 0.68, dur: 0.45 }
       ];
 
       notes.forEach(({ freq, time, dur }) => {
@@ -190,12 +192,9 @@
         const gain = audioCtx.createGain();
         osc.type = "sine";
         osc.frequency.setValueAtTime(freq, now + time);
-
-        // Smooth bell-like envelope
         gain.gain.setValueAtTime(0.001, now + time);
         gain.gain.exponentialRampToValueAtTime(0.22, now + time + 0.02);
         gain.gain.exponentialRampToValueAtTime(0.0001, now + time + dur);
-
         osc.connect(gain);
         gain.connect(audioCtx.destination);
         osc.start(now + time);
@@ -203,20 +202,17 @@
       });
     }
 
-    // Soft Outgoing Ringback Tone (when you are calling someone)
     function playOutgoingPulse() {
       unlockAudio();
       const now = audioCtx.currentTime;
-      [523.25, 659.25].forEach((freq) => { // Soft C5 + E5 chord
+      [523.25, 659.25].forEach((freq) => {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.type = "sine";
         osc.frequency.setValueAtTime(freq, now);
-
         gain.gain.setValueAtTime(0.001, now);
         gain.gain.exponentialRampToValueAtTime(0.08, now + 0.08);
         gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.1);
-
         osc.connect(gain);
         gain.connect(audioCtx.destination);
         osc.start(now);
@@ -243,14 +239,33 @@
       }
     }
 
-    // Test button so user can hear & unlock audio anytime
-    document.getElementById("btnTestRing").onclick = () => {
-      playIncomingChime();
-    };
+    function startCallTimer() {
+      stopCallTimer();
+      secondsElapsed = 0;
+      const callTimer = document.getElementById("callTimer");
+      callTimer.style.display = "block";
+      callTimer.textContent = "00:00";
+      timerInterval = setInterval(() => {
+        secondsElapsed++;
+        const mins = Math.floor(secondsElapsed / 60).toString().padStart(2, '0');
+        const secs = (secondsElapsed % 60).toString().padStart(2, '0');
+        callTimer.textContent = `${mins}:${secs}`;
+      }, 1000);
+    }
 
-    // =========================================================
-    // WEBRTC & FIREBASE SIGNALING
-    // =========================================================
+    function stopCallTimer() {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+      const callTimer = document.getElementById("callTimer");
+      callTimer.style.display = "none";
+      callTimer.textContent = "00:00";
+    }
+
+    document.getElementById("btnTestRing").onclick = () => playIncomingChime();
+
+    // --- WebRTC & Firebase Signaling ---
     let pc = null;
     let localStream = null;
     let remoteStream = null;
@@ -379,6 +394,7 @@
         if (!pc) return;
         if (pc.connectionState === "connected") {
           stopRinging();
+          startCallTimer();
           statusText.textContent = "Status: Connected — Live audio/video active!";
         } else if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
           hangUp();
@@ -397,15 +413,12 @@
       }
     }
 
-    // Outgoing Call (Caller)
     async function startCall(targetUser, withVideo) {
       try {
         unlockAudio();
         statusText.textContent = `Ringing ${targetUser.name}...`;
         document.getElementById("remoteLabel").textContent = targetUser.name;
         await initMediaAndPeer(withVideo);
-
-        // Start outgoing ringback sound
         startOutgoingRing();
 
         const roomRef = doc(collection(db, "calls"));
@@ -443,9 +456,10 @@
             return;
           }
           if (!pc.currentRemoteDescription && data.answer) {
-            stopRinging(); // Stop ringback as soon as peer answers
+            stopRinging();
             await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
             await flushPendingCandidates();
+            startCallTimer();
             statusText.textContent = `Talking with ${targetUser.name}...`;
           }
         });
@@ -471,7 +485,6 @@
       }
     }
 
-    // Incoming Call Listener (Callee)
     function listenForIncomingCalls(myUid) {
       const q = query(
         collection(db, "calls"),
@@ -491,8 +504,6 @@
         document.getElementById("callerNameText").textContent = `${data.callerName} is calling you...`;
         document.getElementById("callTypeText").textContent = data.withVideo ? "Video + Voice Call" : "Voice Only Call";
         incomingBanner.style.display = "flex";
-
-        // Play Messenger-style incoming ringtone
         startIncomingRing();
       });
     }
@@ -535,6 +546,7 @@
           answer: { type: answer.type, sdp: answer.sdp }
         });
 
+        startCallTimer();
         statusText.textContent = `Talking with ${callData.callerName}...`;
 
         const unsubRoom = onSnapshot(roomRef, (snap) => {
@@ -575,6 +587,7 @@
 
     async function hangUp() {
       stopRinging();
+      stopCallTimer();
       unsubCallListeners.forEach((unsub) => unsub());
       unsubCallListeners = [];
 
